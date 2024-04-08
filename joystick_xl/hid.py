@@ -14,6 +14,7 @@ def create_joystick(
     axes: int = 4,
     buttons: int = 16,
     hats: int = 1,
+    triggers: int = 0,
     report_id: int = 0x04,
     gamepad: bool = False,
 ) -> usb_hid.Device:
@@ -42,6 +43,7 @@ def create_joystick(
     _num_axes = axes
     _num_buttons = buttons
     _num_hats = hats
+    _num_triggers = triggers
 
     # Validate the number of configured axes, buttons and hats.
     if _num_axes < 0 or _num_axes > 8:
@@ -52,6 +54,9 @@ def create_joystick(
 
     if _num_hats < 0 or _num_hats > 4:
         raise ValueError("Hat count must be from 0-4.")
+    
+    if _num_triggers < 0 or _num_triggers > 2:
+        raise ValueError("Trigger count must be from 0-2.")
 
     _report_length = 0
 
@@ -81,6 +86,29 @@ def create_joystick(
         )))
 
         _report_length = _num_axes
+        
+    if _num_triggers:
+        _descriptor.extend(bytes((
+            0x05, 0x02,                     # :     USAGE_PAGE (Simulation Controls)
+            0x15, 0x00,                     # :     LOGICAL_MINIMUM (0)
+            0x26, 0xFF, 0x00,               # :     LOGICAL_MAXIMUM (255)
+            0x09, 0xC4,                     # :     USAGE (Acceleration)
+        )))
+        
+        if _num_triggers == 2:
+            _descriptor.extend(bytes((
+                0x09, 0xC5,                 # :     USAGE (Brake)
+            ))
+        )
+        
+        _descriptor.extend(bytes((
+            0x75, 0x08,                     # :     REPORT_SIZE (8)
+            0x95, _num_triggers,            # :     REPORT_COUNT (num_triggers)
+            0x81, 0x02,                     # :     INPUT (Data,Var,Abs)
+            0x05, 0x01,                     # :     USAGE_PAGE (Generic Desktop)
+        )))
+        
+        _report_length += _num_triggers
 
     if _num_hats:
         for i in range(_num_hats):
@@ -146,7 +174,9 @@ def create_joystick(
         _num_buttons,
         "buttons and",
         _num_hats,
-        "hats for a total of",
+        "hats and",
+        _num_triggers,
+        "triggers, for a total of",
         _report_length,
         "report bytes.",
     )
