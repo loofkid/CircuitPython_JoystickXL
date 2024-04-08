@@ -259,7 +259,45 @@ class Axis:
             self._value = new_value
 
         return self._value
+    
+class Trigger(Axis):
+    def __init__(self, source=None, deadband: int = 0, min: int = 0, max: int = 65535, invert: bool = False, bypass: bool = False) -> None:
+        super().__init__(source, deadband, min, max, invert, bypass)
+    
+    def _update(self) -> int:
+        """
+        Read raw input data and convert it to a joystick-compatible value.
 
+        :return: ``0`` to ``255``, ``0`` if idle/centered.
+        :rtype: int
+        """
+        source_value = self._source.value
+
+        # short-circuit processing if the source value hasn't changed
+        if source_value == self._last_source_value:
+            return self._value
+
+        self._last_source_value = source_value
+
+        # clamp raw input value to specified min/max
+        new_value = min(max(source_value, self._min), self._max)
+
+        # account for deadband
+        if new_value > (0 + self._deadband):
+            new_value = new_value - self._min - self._deadband
+        else:
+            new_value = 0
+
+        # calculate scaled joystick-compatible value and clamp to 0-255
+        new_value = min(new_value * 256 // self._db_range, 255)
+
+        # invert the axis if necessary
+        if self._invert:
+            self._value = 255 - new_value
+        else:
+            self._value = new_value
+
+        return self._value
 
 class Button:
     """Data source storage and value processing for a button input."""

@@ -15,7 +15,7 @@ except ImportError:
     pass
 
 from joystick_xl.hid import _get_device
-from joystick_xl.inputs import Axis, Button, Hat
+from joystick_xl.inputs import Axis, Button, Hat, Trigger
 
 
 class Joystick:
@@ -29,6 +29,9 @@ class Joystick:
 
     _num_hats = 0
     """The number of hat switches this joystick can support."""
+    
+    _num_triggers = 0
+    """The number of triggers this joystick can support."""
 
     _report_size = 0
     """The size (in bytes) of USB HID reports for this joystick."""
@@ -47,6 +50,11 @@ class Joystick:
     def num_hats(self) -> int:
         """Return the number of available hat switches in the USB HID descriptor."""
         return self._num_hats
+    
+    @property
+    def num_triggers(self) -> int:
+        """Return the number of available triggers in the USB HID descriptor."""
+        return self._num_triggers
 
     def __init__(self) -> None:
         """
@@ -73,7 +81,8 @@ class Joystick:
                         Joystick._num_axes = config[0]
                         Joystick._num_buttons = config[1]
                         Joystick._num_hats = config[2]
-                        Joystick._report_size = config[3]
+                        Joystick._num_triggers = config[3]
+                        Joystick._report_size = config[4]
                         break
             if Joystick._report_size == 0:
                 raise (ValueError)
@@ -91,6 +100,14 @@ class Joystick:
         self._axis_states = list()
         for _ in range(self.num_axes):
             self._axis_states.append(Axis.IDLE)
+            self._format += "B"
+
+        self.trigger = list()
+        """List of trigger inputs associated with this joystick through ``add_input``."""
+        
+        self._trigger_states = list()
+        for _ in range(self.num_triggers):
+            self._axis_states.append(Trigger.IDLE)
             self._format += "B"
 
         self.hat = list()
@@ -138,6 +155,29 @@ class Joystick:
         if not Axis.MIN <= value <= Axis.MAX:
             raise ValueError("Axis value must be in range 0 to 255")
         return True
+    
+    @staticmethod
+    def _validate_trigger_value(trigger: int, value: int) -> bool:
+        """
+        Ensure the supplied trigger index and value are valid.
+
+        :param trigger: The 0-based index of the trigger to validate.
+        :type trigger: int
+        :param value: The trigger value to validate.
+        :type value: int
+        :raises ValueError: No triggers are configured for the JoystickXL device.
+        :raises ValueError: The supplied trigger index is out of range.
+        :raises ValueError: The supplied trigger value is out of range.
+        :return: ``True`` if the supplied trigger index and value are valid.
+        :rtype: bool
+        """
+        if Joystick._num_triggers == 0:
+            raise ValueError("There are no triggers configured.")
+        if trigger + 1 > Joystick._num_triggers:
+            raise ValueError("Specified trigger is out of range.")
+        if not Trigger.MIN <= value <= Trigger.MAX:
+            raise ValueError("Trigger value must be in range 0 to 255")
+        return True
 
     @staticmethod
     def _validate_button_number(button: int) -> bool:
@@ -180,7 +220,7 @@ class Joystick:
             raise ValueError("Hat value must be in range 0 to 8")
         return True
 
-    def add_input(self, *input: Union[Axis, Button, Hat]) -> None:
+    def add_input(self, *input: Union[Axis, Button, Hat, Trigger]) -> None:
         """
         Associate one or more axis, button or hat inputs with the joystick.
 
@@ -203,6 +243,11 @@ class Joystick:
                     self.axis.append(i)
                 else:
                     raise OverflowError("List is full, cannot add another axis.")
+            elif isinstance(i, Trigger):
+                if len(self.trigger) < self._num_triggers:
+                    self.trigger.append(i)
+                else:
+                    raise OverflowError("List is full, cannot add another trigger.")
             elif isinstance(i, Button):
                 if len(self.button) < self._num_buttons:
                     self.button.append(i)
@@ -233,6 +278,11 @@ class Joystick:
         if len(self.axis):
             axis_values = [(i, a.value) for i, a in enumerate(self.axis)]
             self.update_axis(*axis_values, defer=True, skip_validation=True)
+            
+        # Update trigger values but defer USB HID report generation.
+        if len(self.trigger):
+            trigger_values = [(i, t.value) for i, t in enumerate(self.trigger)]
+            self.update_trigger(*trigger_values, defer=True, skip_validation=True)
 
         # Update button states but defer USB HID report generation.
         if len(self.button):
@@ -248,6 +298,7 @@ class Joystick:
         report_data = list()
 
         report_data.extend(self._axis_states)
+        report_data.extend(self._trigger_states)
 
         if self.num_hats:
             _hat_state = 0
@@ -274,6 +325,8 @@ class Joystick:
         """Reset all inputs to their idle states."""
         for i in range(self.num_axes):
             self._axis_states[i] = Axis.IDLE
+        for i in range(self.num_triggers):
+            self._trigger_states[i] = Trigger.IDLE
         for i in range(len(self._button_states)):
             self._button_states[i] = 0
         for i in range(self.num_hats):
@@ -319,6 +372,47 @@ class Joystick:
                 if self.num_axes > 7 and a > 5:
                     a = self.num_axes - a + 5  # reverse sequence for sliders
                 self._axis_states[a] = value
+
+        if not defer:
+            self.update()
+            
+    def update_trigger(
+        self,
+        *trigger: Tuple[int, int],
+        defer: bool = False,
+        skip_validation: bool = False,
+    ) -> None:
+        """
+        Update the value of one or more trigger input(s).
+        
+        :param trigger: One or more tuples containing an axis index (0-based) and value
+           (``0`` to ``255``, with ``128`` indicating the axis is idle/centered).
+        :type trigger: Tuple[int, int]
+        :param defer: When ``True``, prevents sending a USB HID report upon completion.
+           Defaults to ``False``.
+        :type defer: bool
+        :param skip_validation: When ``True``, bypasses the normal input number/value
+           validation that occurs before they get processed.  This is used for *known
+           good values* that are generated using the ``Joystick.axis[]``,
+           ``Joystick.button[]`` and ``Joystick.hat[]`` lists.  Defaults to ``False``.
+        :type skip_validation: bool
+
+        .. code::
+
+           # Updates a single trigger
+           update_trigger((0, 42))  # 0 = right-trigger
+
+           # Updates multiple triggers
+           update_trigger((0, 22), (1, 237))  # 0 = right-trigger, 1 = left-trigger
+
+        .. note::
+
+           ``update_trigger`` is called automatically for any axis objects added to the
+           built in ``Joystick.triggers[]`` list when ``Joystick.update()`` is called.
+        """
+        for a, value in trigger:
+            if skip_validation or self._validate_trigger_value(a, value): # reverse sequence for sliders
+                self._trigger_states[a] = value
 
         if not defer:
             self.update()
