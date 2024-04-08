@@ -15,6 +15,7 @@ def create_joystick(
     buttons: int = 16,
     hats: int = 1,
     report_id: int = 0x04,
+    gamepad: bool = False,
 ) -> usb_hid.Device:
     """
     Create the ``usb_hid.Device`` required by ``usb_hid.enable()`` in ``boot.py``.
@@ -60,7 +61,7 @@ def create_joystick(
     # fmt: off
     _descriptor = bytearray((
         0x05, 0x01,                         # : USAGE_PAGE (Generic Desktop)
-        0x09, 0x04,                         # : USAGE (Joystick)
+        0x09, 0x05 if gamepad else 0x04,    # : USAGE (Joystick) or (Gamepad)
         0xA1, 0x01,                         # : COLLECTION (Application)
         0x85, report_id,                    # :   REPORT_ID (Default is 4)
     ))
