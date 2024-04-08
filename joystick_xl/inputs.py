@@ -263,6 +263,8 @@ class Axis:
 class Trigger(Axis):
     def __init__(self, source=None, deadband: int = 0, min: int = 0, max: int = 65535, invert: bool = False, bypass: bool = False) -> None:
         super().__init__(source, deadband, min, max, invert, bypass)
+        
+    IDLE = 0
     
     def _update(self) -> int:
         """

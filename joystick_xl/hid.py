@@ -169,16 +169,17 @@ def create_joystick(
         "+ Enabled JoystickXL",
         __version__,
         "with",
+        "axes: ",
         _num_axes,
-        "axes,",
+        ", buttons: ",
         _num_buttons,
-        "buttons and",
+        ", hats: ",
         _num_hats,
-        "hats and",
+        ", and triggers: ",
         _num_triggers,
-        "triggers, for a total of",
+        ", for a total of ",
         _report_length,
-        "report bytes.",
+        " report bytes.",
     )
 
     return usb_hid.Device(
