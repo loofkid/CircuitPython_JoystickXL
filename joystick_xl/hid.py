@@ -154,7 +154,7 @@ def create_joystick(
     return usb_hid.Device(
         report_descriptor=bytes(_descriptor),
         usage_page=0x01,  # same as USAGE_PAGE from descriptor above
-        usage=0x04,  # same as USAGE from descriptor above
+        usage=0x05 if gamepad else 0x04,  # same as USAGE from descriptor above
         report_ids=(report_id,),  # report ID defined in descriptor
         in_report_lengths=(_report_length,),  # length of reports to host
         out_report_lengths=(0,),  # length of reports from host
@@ -166,7 +166,8 @@ def _get_device() -> usb_hid.Device:
     for device in usb_hid.devices:
         if (
             device.usage_page == 0x01
-            and device.usage == 0x04
+            and (device.usage == 0x04
+            or device.usage == 0x05)
             and hasattr(device, "send_report")
         ):
             return device
